@@ -1,0 +1,6 @@
+name: pulumi-study
+description: A Python program to deploy a static website on AWS
+runtime:
+    name: python
+    options:
+        virtualenv: venv
