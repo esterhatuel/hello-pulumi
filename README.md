@@ -13,6 +13,10 @@ In addtion, CloudFront sets behind the s3 bucket to serve HTTPS requests.
 ![Alt text](lucid.png?raw=true "Title")
 
 
+
+## Created Resources  ##
+![Alt text](resourceslist.png?raw=true "Title")
+
 ### Prequsties # 
 
 * Pulumi version 3.47.1
