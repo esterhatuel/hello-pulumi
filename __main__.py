@@ -17,7 +17,7 @@ Access_log_bucket = aws.s3.Bucket("AccesslogBucket", acl="log-delivery-write", s
         ),
         ),),)
 
-example_bucket_public_access_block = aws.s3.BucketPublicAccessBlock("BucketPublicAccessBlock",
+bucket_public_access_block = aws.s3.BucketPublicAccessBlock("BucketPublicAccessBlock",
     bucket=Access_log_bucket.id,
     block_public_acls=True,
     block_public_policy=True,
