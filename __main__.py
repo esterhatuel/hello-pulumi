@@ -9,23 +9,23 @@ index_document = config.get("indexDocument") or "index.html"
 error_document = config.get("errorDocument") or "error.html"
 
 
-
-# Create an kms for defult encryption 
-mykey = aws.kms.Key("s3key",
-    description="This key is used to encrypt bucket objects",
-    deletion_window_in_days=10)
-
-Access_log_bucket = aws.s3.Bucket("AccesslogBucket", acl="log-delivery-write")
-# Create an S3 bucket and configure it as a website.
-bucket = aws.s3.Bucket(
-    "static-website-bucket",server_side_encryption_configuration=aws.s3.BucketServerSideEncryptionConfigurationArgs(
+# Create an kms for "Access_log_bucket" encryption 
+Access_log_bucket = aws.s3.Bucket("AccesslogBucket", acl="log-delivery-write", server_side_encryption_configuration=aws.s3.BucketServerSideEncryptionConfigurationArgs(
         rule=aws.s3.BucketServerSideEncryptionConfigurationRuleArgs(
         apply_server_side_encryption_by_default=aws.s3.BucketServerSideEncryptionConfigurationRuleApplyServerSideEncryptionByDefaultArgs(
-        kms_master_key_id=mykey.arn,
-        sse_algorithm="aws:kms",
+        sse_algorithm="AES256",
         ),
-    ),
-    ),
+        ),),)
+
+example_bucket_public_access_block = aws.s3.BucketPublicAccessBlock("BucketPublicAccessBlock",
+    bucket=Access_log_bucket.id,
+    block_public_acls=True,
+    block_public_policy=True,
+    ignore_public_acls=True,
+    restrict_public_buckets=True)        
+# Create an S3 bucket and configure it as a website.
+bucket = aws.s3.Bucket(
+    "static-website-s3",
     loggings=[aws.s3.BucketLoggingArgs(
         target_bucket=Access_log_bucket.id,
         target_prefix="log/",
@@ -46,7 +46,6 @@ bucket_policy_document = aws.iam.get_policy_document_output(statements=[aws.iam.
         "s3:GetObject"
     ],
     resources=[
-        bucket.arn,
         bucket.arn.apply(lambda arn: f"{arn}/*"),
     ],
 )])
@@ -62,6 +61,7 @@ bucket_folder = synced_folder.S3BucketFolder(
 
 
 # Create a CloudFront CDN to distribute and cache the website.
+
 cdn = aws.cloudfront.Distribution(
     "cdn",
     enabled=True,
@@ -74,9 +74,11 @@ cdn = aws.cloudfront.Distribution(
                 http_port=80,
                 https_port=443,
                 origin_ssl_protocols=["TLSv1.2"],
-            ),
-        )
+               ),
+        ),
+ 
     ],
+
     default_cache_behavior=aws.cloudfront.DistributionDefaultCacheBehaviorArgs(
         target_origin_id=bucket.arn,
         viewer_protocol_policy="redirect-to-https",
@@ -116,63 +118,37 @@ cdn = aws.cloudfront.Distribution(
     viewer_certificate=aws.cloudfront.DistributionViewerCertificateArgs(
         cloudfront_default_certificate=True,
     ),
+
 )
 
 
-user_updates = aws.sns.Topic("sns_user_updates",delivery_policy="""{
-  "http": {
-    "defaultHealthyRetryPolicy": {
-      "minDelayTarget": 20,
-      "maxDelayTarget": 20,
-      "numRetries": 3,
-      "numMaxDelayRetries": 0,
-      "numNoDelayRetries": 0,
-      "numMinDelayRetries": 0,
-      "backoffFunction": "linear"
-    },
-    "disableSubscriptionOverrides": false,
-    "defaultThrottlePolicy": {
-      "maxReceivesPerSecond": 1
-    }
-  }
-}
 
-""")
-sns_topic_policy = user_updates.arn.apply(lambda arn: aws.iam.get_policy_document_output(policy_id="__default_policy_ID",
-    statements=[aws.iam.GetPolicyDocumentStatementArgs(
-        conditions=[aws.iam.GetPolicyDocumentStatementConditionArgs(
-            test="ArnLike",
-            variable="AWS:SourceArn",
-            values=[bucket.arn]
-        )],
-        actions=[
-            "sns:Publish"
-        ],
-        effect="Allow",
-        principals=[aws.iam.GetPolicyDocumentStatementPrincipalArgs(
-            type="*",
-            identifiers=["*"],
-        )],
-        resources=[arn],
-        sid="__default_statement_ID",
-    )]))
-default = aws.sns.TopicPolicy("default",
-    arn=user_updates.arn,
-    policy=sns_topic_policy.json)
-
+user_updates = aws.sns.Topic("topic",policy=bucket.arn.apply(lambda arn: f"""{{
+    "Version":"2012-10-17",
+    "Statement":[{{
+        "Effect": "Allow",
+        "Principal": {{ "Service": "s3.amazonaws.com" }},
+        "Action": "sns:Publish",
+        "Resource": "arn:aws:sns:*:*:topic-*",
+        "Condition":{{
+            "ArnLike":{{"aws:SourceArn":"{arn}"}}
+        }}
+    }}]
+}}
+"""))
+bucket_notification = aws.s3.BucketNotification("bucketNotification",opts=pulumi.ResourceOptions(depends_on=[user_updates]),
+    bucket=bucket.id,
+    topics=[aws.s3.BucketNotificationTopicArgs(
+        topic_arn=user_updates.arn,
+        events=["s3:ObjectCreated:*","s3:ObjectRemoved:*","s3:ObjectAcl:Put"]
+    )])
 
 sns_topic_topic_subscription = aws.sns.TopicSubscription("user-updates-subscribe",
     topic=user_updates.arn,
     protocol="email",
-    endpoint="esterh@qwilt.com"
+    endpoint="ester.hatchuel@gmail.com"
 )
 
-bucket_notification = aws.s3.BucketNotification(opts=pulumi.ResourceOptions("bucketNotification",depends_on=[user_updates]),
-    bucket=bucket.id,
-    topics=[aws.s3.BucketNotificationTopicArgs(
-        topic_arn=user_updates.arn,
-        events=["s3:ObjectCreated:*","s3:ObjectRemoved:*", "s3:ObjectAcl:Put"]
-    )])
 
 
 
