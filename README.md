@@ -4,7 +4,7 @@ This project sets up a public S3 bucket-hosting static website, and bucket notif
 
 The notifictions sent to the SNS-topic subscribes.
 
-In addtion, CloudFront sets behind the s3 bucket to serve HTTPS requests. 
+In addtion, CloudFront sets in front of the s3 bucket to serve HTTPS requests. 
 
 
 
